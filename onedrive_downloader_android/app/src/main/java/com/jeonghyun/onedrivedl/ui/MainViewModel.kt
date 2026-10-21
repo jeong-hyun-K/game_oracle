@@ -67,10 +67,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var loadJob: Job? = null
 
     // 옵션
-    var mediaOnly by mutableStateOf(settings.getBoolean("media_only", false))
-        private set
-    var flatten by mutableStateOf(settings.getBoolean("flatten", false))
-        private set
     var wifiOnly by mutableStateOf(settings.getBoolean("wifi_only", true))
         private set
 
@@ -181,16 +177,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun updateMediaOnly(v: Boolean) {
-        mediaOnly = v
-        settings.edit().putBoolean("media_only", v).apply()
-    }
-
-    fun updateFlatten(v: Boolean) {
-        flatten = v
-        settings.edit().putBoolean("flatten", v).apply()
-    }
-
     fun updateWifiOnly(v: Boolean) {
         wifiOnly = v
         settings.edit().putBoolean("wifi_only", v).apply()
@@ -203,7 +189,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val target = path.last()
-        DownloadWorker.start(getApplication(), target.id, target.name, mediaOnly, flatten, wifiOnly)
+        DownloadWorker.start(getApplication(), target.id, target.name, wifiOnly)
         message = "'${target.name}' 폴더 다운로드를 시작합니다."
     }
 

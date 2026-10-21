@@ -9,13 +9,10 @@ import java.io.IOException
 import java.io.OutputStream
 
 /**
- * 받은 파일을 공용 저장소에 저장한다 (저장소 권한 불필요, Android 10 이상).
- * - 사진·동영상: 사진/OneDrive/...  → Google 포토 '기기의 사진'에 폴더로 나타남
- * - 그 밖의 파일: 다운로드/OneDrive/...
+ * 받은 파일을 OneDrive 폴더 구조 그대로 다운로드/OneDrive/... 에 저장한다
+ * (저장소 권한 불필요, Android 10 이상). 사진·동영상도 같은 폴더에 들어가며 갤러리에도 보인다.
  */
 class MediaSaver(context: Context) {
-
-    enum class Kind { IMAGE, VIDEO, OTHER }
 
     private val resolver = context.applicationContext.contentResolver
 
@@ -27,35 +24,19 @@ class MediaSaver(context: Context) {
             ?: "application/octet-stream"
     }
 
-    fun kindOf(mime: String): Kind = when {
-        mime.startsWith("image/") -> Kind.IMAGE
-        mime.startsWith("video/") -> Kind.VIDEO
-        else -> Kind.OTHER
-    }
-
     /**
      * @param subDir "OneDrive" 아래 하위 경로 (예: "여행/2023"), 빈 문자열이면 OneDrive 바로 아래
      * @param write 출력 스트림에 내용을 쓰는 함수. 예외가 나면 만들던 파일은 지워진다.
      */
-    fun save(subDir: String, name: String, mime: String, takenAtMs: Long?, write: (OutputStream) -> Unit): Uri {
-        val kind = kindOf(mime)
-        val collection = when (kind) {
-            Kind.IMAGE -> MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            Kind.VIDEO -> MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            Kind.OTHER -> MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        }
-        val root = if (kind == Kind.OTHER) "Download/OneDrive" else "Pictures/OneDrive"
-        val relativePath = if (subDir.isEmpty()) "$root/" else "$root/$subDir/"
-
+    fun save(subDir: String, name: String, mime: String, write: (OutputStream) -> Unit): Uri {
+        val relativePath = if (subDir.isEmpty()) "$ROOT/" else "$ROOT/$subDir/"
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, sanitize(name))
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
-            if (kind != Kind.OTHER && takenAtMs != null) {
-                put(MediaStore.MediaColumns.DATE_TAKEN, takenAtMs)
-            }
         }
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val uri = resolver.insert(collection, values)
             ?: throw IOException("저장 위치를 만들 수 없습니다: $relativePath$name")
         try {
@@ -75,6 +56,8 @@ class MediaSaver(context: Context) {
     }.getOrDefault(false)
 
     companion object {
+        const val ROOT = "Download/OneDrive"
+
         private val EXTRA_MIME = mapOf(
             "heic" to "image/heic",
             "heif" to "image/heif",

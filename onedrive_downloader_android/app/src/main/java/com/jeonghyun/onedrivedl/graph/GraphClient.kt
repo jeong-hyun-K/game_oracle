@@ -11,7 +11,6 @@ import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
-import java.time.Instant
 
 data class DriveItem(
     val id: String,
@@ -20,8 +19,6 @@ data class DriveItem(
     val isFolder: Boolean,
     val childCount: Int,
     val mimeType: String?,
-    /** 촬영 시각(없으면 파일 생성 시각), epoch ms */
-    val takenAtMs: Long?,
 )
 
 class GraphException(message: String) : IOException(message)
@@ -69,7 +66,7 @@ class GraphClient(private val auth: AuthManager) {
             builder.addPathSegments("me/drive/items").addPathSegment(folderId).addPathSegment("children")
         }
         return builder
-            .addQueryParameter("\$select", "id,name,size,folder,file,photo,fileSystemInfo")
+            .addQueryParameter("\$select", "id,name,size,folder,file")
             .addQueryParameter("\$top", "200")
             .build()
     }
@@ -120,9 +117,6 @@ class GraphClient(private val auth: AuthManager) {
         val file = o.optJSONObject("file")
         // 폴더도 파일도 아닌 항목(OneNote 전자필기장 등)은 건너뛴다
         if (folder == null && file == null) return null
-        val taken = o.optJSONObject("photo")?.optString("takenDateTime")
-            ?.takeIf { it.isNotEmpty() }
-            ?: o.optJSONObject("fileSystemInfo")?.optString("createdDateTime")?.takeIf { it.isNotEmpty() }
         return DriveItem(
             id = o.getString("id"),
             name = o.getString("name"),
@@ -130,7 +124,6 @@ class GraphClient(private val auth: AuthManager) {
             isFolder = folder != null,
             childCount = folder?.optInt("childCount", 0) ?: 0,
             mimeType = file?.optString("mimeType")?.takeIf { it.isNotEmpty() },
-            takenAtMs = taken?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
         )
     }
 

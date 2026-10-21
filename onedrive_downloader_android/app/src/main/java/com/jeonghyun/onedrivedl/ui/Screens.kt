@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkInfo
+import com.jeonghyun.onedrivedl.data.MediaSaver
 import com.jeonghyun.onedrivedl.graph.DriveItem
 import com.jeonghyun.onedrivedl.ui.MainViewModel.Screen
 import com.jeonghyun.onedrivedl.work.DownloadWorker
@@ -303,8 +304,6 @@ private fun BrowseScreen(vm: MainViewModel) {
 
         Surface(tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                OptionRow("사진·동영상만 받기", vm.mediaOnly, vm::updateMediaOnly)
-                OptionRow("사진·동영상을 한 폴더에 모으기 (Google 포토 백업 설정이 쉬워짐)", vm.flatten, vm::updateFlatten)
                 OptionRow("Wi-Fi에서만 받기", vm.wifiOnly, vm::updateWifiOnly)
                 Button(
                     onClick = { confirm = true },
@@ -324,10 +323,9 @@ private fun BrowseScreen(vm: MainViewModel) {
             title = { Text("다운로드 시작") },
             text = {
                 Text(
-                    "'$name' 폴더와 그 안의 모든 하위 폴더를 휴대폰에 내려받습니다.\n\n" +
-                        "• 사진·동영상 → 사진/OneDrive/\n" +
-                        (if (vm.mediaOnly) "" else "• 그 밖의 파일 → 다운로드/OneDrive/\n") +
-                        "\n이미 받은 파일은 건너뜁니다.",
+                    "'$name' 폴더와 그 안의 모든 하위 폴더를 폴더 구조 그대로 휴대폰에 내려받습니다.\n\n" +
+                        "저장 위치: 내장 저장공간/${saveDir(vm)}\n\n" +
+                        "이미 받은 파일은 건너뜁니다.",
                 )
             },
             confirmButton = {
@@ -343,6 +341,12 @@ private fun BrowseScreen(vm: MainViewModel) {
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("취소") } },
         )
     }
+}
+
+/** 선택한 폴더가 저장될 휴대폰 경로 */
+private fun saveDir(vm: MainViewModel): String {
+    val target = vm.path.last()
+    return if (target.id == null) "${MediaSaver.ROOT}/" else "${MediaSaver.ROOT}/${MediaSaver.sanitize(target.name)}/"
 }
 
 @Composable
@@ -464,7 +468,7 @@ private fun WorkCard(work: WorkInfo?, vm: MainViewModel) {
                         Text("같은 폴더를 다시 다운로드하면 실패한 파일만 다시 받습니다.", style = MaterialTheme.typography.bodySmall)
                     }
                     Text(
-                        "Google 포토에 올리려면: Google 포토 앱 → 컬렉션 → '기기의 사진'에서 OneDrive 폴더를 열고 '백업'을 켜세요.",
+                        "저장 위치: 내 파일(파일 관리자) → 다운로드 → OneDrive",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     TextButton(onClick = { vm.dismissResult(id) }) { Text("닫기") }

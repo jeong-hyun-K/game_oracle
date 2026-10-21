@@ -61,8 +61,6 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
     override suspend fun doWork(): Result {
         val folderId = inputData.getString(KEY_FOLDER_ID)
         val folderName = inputData.getString(KEY_FOLDER_NAME) ?: "OneDrive"
-        val mediaOnly = inputData.getBoolean(KEY_MEDIA_ONLY, false)
-        val flatten = inputData.getBoolean(KEY_FLATTEN, false)
 
         createChannel()
         try {
@@ -74,7 +72,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         return try {
             // 1단계: 하위 폴더까지 모든 파일 목록 수집
             val baseDir = if (folderId == null) "" else MediaSaver.sanitize(folderName)
-            val entries = scan(folderId, baseDir, mediaOnly, flatten)
+            val entries = scan(folderId, baseDir)
             if (isStopped) return Result.failure()
 
             // 이미 받은 파일 제외
@@ -133,7 +131,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         }
     }
 
-    private suspend fun scan(rootId: String?, baseDir: String, mediaOnly: Boolean, flatten: Boolean): List<Entry> {
+    private suspend fun scan(rootId: String?, baseDir: String): List<Entry> {
         val result = mutableListOf<Entry>()
         val queue = ArrayDeque<Pair<String?, String>>()
         queue.add(rootId to baseDir)
@@ -145,12 +143,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     val sub = MediaSaver.sanitize(child.name)
                     queue.add(child.id to if (dir.isEmpty()) sub else "$dir/$sub")
                 } else {
-                    val mime = saver.resolveMime(child.name, child.mimeType)
-                    val isMedia = saver.kindOf(mime) != MediaSaver.Kind.OTHER
-                    if (mediaOnly && !isMedia) continue
-                    // '한 폴더에 모으기'는 사진·동영상에만 적용
-                    val target = if (flatten && isMedia) baseDir else dir
-                    result.add(Entry(child, target, mime))
+                    result.add(Entry(child, dir, saver.resolveMime(child.name, child.mimeType)))
                 }
             }
             folders++
@@ -173,7 +166,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             try {
                 val uri = graph.openContent(entry.item.id).use { response ->
                     val input = response.body!!.byteStream()
-                    saver.save(entry.subDir, entry.item.name, entry.mime, entry.item.takenAtMs) { out ->
+                    saver.save(entry.subDir, entry.item.name, entry.mime) { out ->
                         val buffer = ByteArray(64 * 1024)
                         while (true) {
                             if (isStopped) throw CancellationException("중지됨")
@@ -270,8 +263,6 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
         const val KEY_FOLDER_ID = "folder_id"
         const val KEY_FOLDER_NAME = "folder_name"
-        const val KEY_MEDIA_ONLY = "media_only"
-        const val KEY_FLATTEN = "flatten"
 
         const val KEY_PHASE = "phase"
         const val KEY_TOTAL = "total"
@@ -293,8 +284,6 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             context: Context,
             folderId: String?,
             folderName: String,
-            mediaOnly: Boolean,
-            flatten: Boolean,
             wifiOnly: Boolean,
         ) {
             val request = OneTimeWorkRequestBuilder<DownloadWorker>()
@@ -302,8 +291,6 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     workDataOf(
                         KEY_FOLDER_ID to folderId,
                         KEY_FOLDER_NAME to folderName,
-                        KEY_MEDIA_ONLY to mediaOnly,
-                        KEY_FLATTEN to flatten,
                     ),
                 )
                 .setConstraints(
