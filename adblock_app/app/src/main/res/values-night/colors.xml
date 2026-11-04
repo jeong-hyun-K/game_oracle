@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#111417</color>
+    <color name="surface">#1C2025</color>
+    <color name="text">#ECEFF2</color>
+    <color name="text_sub">#9AA5B1</color>
+    <color name="divider">#2B3036</color>
+    <color name="accent">#3DBA7A</color>
+    <color name="accent_soft">#173526</color>
+    <color name="off_soft">#22272D</color>
+    <color name="stop">#4A535E</color>
+</resources>

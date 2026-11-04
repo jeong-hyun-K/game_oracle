@@ -1,0 +1,24 @@
+# 앱 내 전면 광고 SDK 추가 차단 목록
+# 기본 목록(StevenBlack hosts)에 없는 모바일 광고 네트워크 주소입니다.
+# 상위 주소를 적으면 그 아래 주소도 모두 차단됩니다. (예: mobon.net → *.mobon.net)
+
+# ── 해외 모바일 광고 네트워크 ──
+mintegral.net
+pangleglobal.com
+fyber.com
+inner-active.mobi
+ironsrc.mobi
+mobilefuse.com
+bidmachine.io
+liftoff.io
+moloco.com
+startappservice.com
+smaato.net
+adnxs.com
+
+# ── 국내 광고 네트워크 ──
+ad.daum.net
+cauly.co.kr
+adpopcorn.com
+mobon.net
+veta.naver.com
