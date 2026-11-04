@@ -15,6 +15,7 @@ object AdBlockState {
     private const val KEY_BLOCKED_TOTAL = "blocked_total"
     private const val KEY_ALLOWLIST = "allowlist"
     private const val KEY_LIST_UPDATED_AT = "list_updated_at"
+    private const val KEY_EXCLUDED_APPS = "excluded_apps"
     private const val RECENT_MAX = 100
 
     /** 차단 서비스가 실제로 동작 중인지 */
@@ -77,6 +78,14 @@ object AdBlockState {
     fun removeAllowed(ctx: Context, domain: String) {
         allowlist = allowlist - domain
         prefs(ctx).edit().putStringSet(KEY_ALLOWLIST, allowlist).apply()
+    }
+
+    /** VPN에서 제외할 앱(패키지 이름). 이 앱들은 광고 차단 VPN을 거치지 않습니다. */
+    fun excludedApps(ctx: Context): Set<String> =
+        prefs(ctx).getStringSet(KEY_EXCLUDED_APPS, emptySet())!!.toSet()
+
+    fun setExcludedApps(ctx: Context, apps: Set<String>) {
+        prefs(ctx).edit().putStringSet(KEY_EXCLUDED_APPS, apps).apply()
     }
 
     fun listUpdatedAt(ctx: Context) = prefs(ctx).getLong(KEY_LIST_UPDATED_AT, 0)

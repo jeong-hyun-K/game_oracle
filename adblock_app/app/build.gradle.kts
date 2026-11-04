@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.jeonghyunk.adblock"
         minSdk = 26          // 안드로이드 8.0 이상
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {

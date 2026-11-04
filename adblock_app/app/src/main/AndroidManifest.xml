@@ -10,6 +10,14 @@
     <!-- 휴대폰을 재부팅해도 자동으로 다시 켜기 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- VPN 제외 앱 선택 화면에서 설치된 앱 목록(홈 화면 아이콘이 있는 앱)을 보여주기 위해 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -26,6 +34,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ExcludedAppsActivity"
+            android:exported="false"
+            android:label="@string/excluded_title" />
+
+        <!-- 상단바 빠른 설정 타일 -->
+        <service
+            android:name=".ToggleTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".AdBlockVpnService"

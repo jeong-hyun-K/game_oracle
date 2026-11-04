@@ -37,6 +37,7 @@ class AdBlockVpnService : VpnService() {
         private const val TAG = "AdBlockVpn"
         const val ACTION_START = "io.github.jeonghyunk.adblock.START"
         const val ACTION_STOP = "io.github.jeonghyunk.adblock.STOP"
+        const val ACTION_RESTART = "io.github.jeonghyunk.adblock.RESTART"
 
         // VPN 내부에서만 쓰는 가상 주소
         private const val VPN_ADDRESS = "10.111.222.1"
@@ -58,6 +59,13 @@ class AdBlockVpnService : VpnService() {
             val i = Intent(ctx, AdBlockVpnService::class.java).setAction(ACTION_STOP)
             ctx.startService(i)
         }
+
+        /** 제외 앱 목록 등 VPN 설정이 바뀌었을 때, 켜져 있으면 다시 시작해서 적용 */
+        fun restartIfRunning(ctx: Context) {
+            if (!AdBlockState.running) return
+            val i = Intent(ctx, AdBlockVpnService::class.java).setAction(ACTION_RESTART)
+            ctx.startService(i)
+        }
     }
 
     @Volatile private var stopping = false
@@ -68,6 +76,9 @@ class AdBlockVpnService : VpnService() {
         if (intent?.action == ACTION_STOP) {
             shutdown(disable = true)
             return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_RESTART) {
+            stopping = true                               // 지금 VPN을 닫고 새 설정으로 다시 열기
         }
         // ACTION_START, 재부팅 후 시작, 시스템의 "항상 켜진 VPN" 시작 모두 여기로 옵니다.
         startForegroundWithNotification()
@@ -108,6 +119,7 @@ class AdBlockVpnService : VpnService() {
         closeTun()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+        ToggleTileService.refresh(this)
     }
 
     private fun closeTun() {
@@ -132,8 +144,11 @@ class AdBlockVpnService : VpnService() {
                 .setConfigureIntent(mainActivityIntent())
             // IPv6 통신은 VPN을 거치지 않고 그대로 통과
             builder.allowFamily(OsConstants.AF_INET6)
-            // 이 앱 자신의 통신(차단 목록 업데이트)은 VPN에서 제외
-            try { builder.addDisallowedApplication(packageName) } catch (_: Exception) { }
+            // 이 앱 자신의 통신(차단 목록 업데이트)과 사용자가 고른 앱은 VPN에서 제외
+            // (VPN 사용을 막는 앱도 제외하면 VPN 없이 평소처럼 통신합니다)
+            for (pkg in AdBlockState.excludedApps(this) + packageName) {
+                try { builder.addDisallowedApplication(pkg) } catch (_: Exception) { }   // 삭제된 앱 등
+            }
             // VPN 때문에 와이파이가 "데이터 요금제 네트워크"로 보이지 않도록
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
 
@@ -148,6 +163,7 @@ class AdBlockVpnService : VpnService() {
             tun = pfd
             AdBlockState.running = true
             AdBlockState.setEnabled(this, true)
+            ToggleTileService.refresh(this)
 
             pool = Executors.newFixedThreadPool(8)
             val input = FileInputStream(pfd.fileDescriptor)
@@ -182,6 +198,7 @@ class AdBlockVpnService : VpnService() {
             if (tun === myTun) {
                 tun = null
                 AdBlockState.running = false
+                ToggleTileService.refresh(this)
             }
         }
     }

@@ -35,6 +35,7 @@ class MainActivity : Activity() {
     private lateinit var blockedCount: TextView
     private lateinit var listSize: TextView
     private lateinit var updateButton: Button
+    private lateinit var excludedButton: Button
     private lateinit var recentList: ListView
     private lateinit var recentEmpty: TextView
     private lateinit var recentAdapter: ArrayAdapter<String>
@@ -63,6 +64,7 @@ class MainActivity : Activity() {
         blockedCount = findViewById(R.id.blockedCount)
         listSize = findViewById(R.id.listSize)
         updateButton = findViewById(R.id.updateButton)
+        excludedButton = findViewById(R.id.excludedButton)
         recentList = findViewById(R.id.recentList)
         recentEmpty = findViewById(R.id.recentEmpty)
 
@@ -75,6 +77,7 @@ class MainActivity : Activity() {
         toggleButton.setOnClickListener { onToggle() }
         updateButton.setOnClickListener { updateBlocklist() }
         findViewById<Button>(R.id.allowButton).setOnClickListener { showAllowlist() }
+        excludedButton.setOnClickListener { startActivity(Intent(this, ExcludedAppsActivity::class.java)) }
 
         // 차단 목록 개수를 보여주기 위해 미리 불러오기 (수십만 줄이라 백그라운드에서)
         Thread { Blocklist.ensureLoaded(applicationContext) }.start()
@@ -144,6 +147,8 @@ class MainActivity : Activity() {
         blockedCount.text = numberFormat.format(AdBlockState.blockedCount.get())
         val size = Blocklist.size
         listSize.text = if (size == 0) "…" else numberFormat.format(size)
+
+        excludedButton.text = getString(R.string.manage_excluded, AdBlockState.excludedApps(this).size)
 
         val recent = AdBlockState.recentBlocked.toList()
         if (recent != shownRecent) {
