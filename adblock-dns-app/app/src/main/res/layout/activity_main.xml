@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- 상태 -->
+        <TextView
+            android:id="@+id/statusTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/statusDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/toggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="16dp"
+            android:textSize="18sp" />
+
+        <Button
+            android:id="@+id/manualButton"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="16dp"
+            android:text="@string/button_manual"
+            android:textSize="18sp" />
+
+        <!-- 사용 방법 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/section_mode" />
+
+        <TextView
+            android:id="@+id/modeText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingExtra="2dp"
+            android:textSize="15sp" />
+
+        <!-- DNS 선택 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/section_dns" />
+
+        <RadioGroup
+            android:id="@+id/dnsGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <RadioButton
+                android:id="@+id/radioAdguard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dns_adguard" />
+
+            <RadioButton
+                android:id="@+id/radioFamily"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dns_family" />
+
+            <RadioButton
+                android:id="@+id/radioCustom"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dns_custom" />
+        </RadioGroup>
+
+        <LinearLayout
+            android:id="@+id/customRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/customHost"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/dns_custom_hint"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:singleLine="true" />
+
+            <Button
+                android:id="@+id/applyCustom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/button_apply_custom" />
+        </LinearLayout>
+
+        <!-- adb 권한 안내 -->
+        <LinearLayout
+            android:id="@+id/adbSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/SectionTitle"
+                android:text="@string/section_adb" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="2dp"
+                android:text="@string/adb_help"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/adbCommand"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/code_background"
+                android:fontFamily="monospace"
+                android:padding="12dp"
+                android:textIsSelectable="true"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/copyCommand"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/button_copy_command" />
+        </LinearLayout>
+
+        <!-- 참고 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:alpha="0.75"
+            android:lineSpacingExtra="2dp"
+            android:text="@string/tip"
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>

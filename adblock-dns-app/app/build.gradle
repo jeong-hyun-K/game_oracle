@@ -1,0 +1,27 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.adblockdns.toggle'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.adblockdns.toggle'
+        minSdk 28        // 개인 DNS는 안드로이드 9(API 28)부터 지원
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
