@@ -1,0 +1,2 @@
+# yt-dlp[default] 에는 유튜브 해독 스크립트(yt-dlp-ejs) 등 권장 구성요소가 포함됩니다.
+yt-dlp[default]
