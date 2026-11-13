@@ -1,0 +1,351 @@
+diff --git a/app/build.gradle b/app/build.gradle
+index 7690275..17a690a 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -9,7 +9,7 @@ android {
+         minSdkVersion 26
+         targetSdkVersion 28
+         versionCode 33
+-        versionName "11.2"
++        versionName "11.2-battlenet"
+     }
+ 
+     buildTypes {
+diff --git a/app/src/main/java/com/winlator/ContainersFragment.java b/app/src/main/java/com/winlator/ContainersFragment.java
+index aab4c0a..341d13f 100644
+--- a/app/src/main/java/com/winlator/ContainersFragment.java
++++ b/app/src/main/java/com/winlator/ContainersFragment.java
+@@ -11,6 +11,7 @@ import android.view.MenuInflater;
+ import android.view.MenuItem;
+ import android.view.View;
+ import android.view.ViewGroup;
++import android.widget.Button;
+ import android.widget.FrameLayout;
+ import android.widget.ImageView;
+ import android.widget.PopupMenu;
+@@ -26,6 +27,7 @@ import androidx.recyclerview.widget.DividerItemDecoration;
+ import androidx.recyclerview.widget.LinearLayoutManager;
+ import androidx.recyclerview.widget.RecyclerView;
+ 
++import com.winlator.battlenet.BattleNetOneClick;
+ import com.winlator.container.Container;
+ import com.winlator.container.ContainerManager;
+ import com.winlator.contentdialog.ContentDialog;
+@@ -39,6 +41,7 @@ import java.util.List;
+ public class ContainersFragment extends Fragment {
+     private RecyclerView recyclerView;
+     private TextView emptyTextView;
++    private Button battleNetButton;
+     private ContainerManager manager;
+     private PreloaderDialog preloaderDialog;
+ 
+@@ -64,6 +67,8 @@ public class ContainersFragment extends Fragment {
+         recyclerView = frameLayout.findViewById(R.id.RecyclerView);
+         Context context = recyclerView.getContext();
+         emptyTextView = frameLayout.findViewById(R.id.TVEmptyText);
++        battleNetButton = frameLayout.findViewById(R.id.BTBattleNetOneClick);
++        battleNetButton.setOnClickListener((v) -> BattleNetOneClick.start(getActivity(), manager, this::loadContainersList));
+         recyclerView.setLayoutManager(new LinearLayoutManager(context));
+ 
+         DividerItemDecoration itemDecoration = new DividerItemDecoration(recyclerView.getContext(), DividerItemDecoration.VERTICAL);
+@@ -75,7 +80,20 @@ public class ContainersFragment extends Fragment {
+     private void loadContainersList() {
+         ArrayList<Container> containers = manager.getContainers();
+         recyclerView.setAdapter(new ContainersAdapter(containers));
+-        if (containers.isEmpty()) emptyTextView.setVisibility(View.VISIBLE);
++        emptyTextView.setVisibility(containers.isEmpty() ? View.VISIBLE : View.GONE);
++        updateBattleNetButton();
++    }
++
++    private void updateBattleNetButton() {
++        Container container = BattleNetOneClick.findContainer(manager);
++        boolean installed = container != null && BattleNetOneClick.findLauncher(container) != null;
++        battleNetButton.setText(installed ? R.string.battlenet_one_click_launch : R.string.battlenet_one_click_install);
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        if (manager != null) updateBattleNetButton();
+     }
+ 
+     @Override
+diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+index 667f1b3..133d180 100644
+--- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
++++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+@@ -29,6 +29,7 @@ import androidx.preference.PreferenceManager;
+ import com.google.android.material.navigation.NavigationView;
+ import com.winlator.alsaserver.ALSAClient;
+ import com.winlator.container.AudioDrivers;
++import com.winlator.battlenet.BattleNetOneClick;
+ import com.winlator.container.Container;
+ import com.winlator.container.ContainerManager;
+ import com.winlator.container.DXWrappers;
+@@ -432,7 +433,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         if (environment != null) environment.stopEnvironmentComponents();
+ 
+         Intent intent = getIntent();
+-        if (intent.hasExtra("exec_path")) {
++        if (intent.hasExtra("exec_path") && !intent.getBooleanExtra(BattleNetOneClick.INTENT_EXTRA, false)) {
+             AppUtils.RestartApplicationOptions options = new AppUtils.RestartApplicationOptions();
+             options.containerId = container.id;
+             options.startPath = FileUtils.getDirname(intent.getStringExtra("exec_path"));
+diff --git a/app/src/main/java/com/winlator/battlenet/BattleNetOneClick.java b/app/src/main/java/com/winlator/battlenet/BattleNetOneClick.java
+new file mode 100644
+index 0000000..e549116
+--- /dev/null
++++ b/app/src/main/java/com/winlator/battlenet/BattleNetOneClick.java
+@@ -0,0 +1,185 @@
++package com.winlator.battlenet;
++
++import android.app.Activity;
++import android.content.Context;
++import android.content.Intent;
++import android.widget.Toast;
++
++import com.winlator.R;
++import com.winlator.XServerDisplayActivity;
++import com.winlator.box64.Box64Preset;
++import com.winlator.container.Container;
++import com.winlator.container.ContainerManager;
++import com.winlator.container.GraphicsDrivers;
++import com.winlator.contentdialog.ContentDialog;
++import com.winlator.core.EnvVars;
++import com.winlator.core.FileUtils;
++import com.winlator.core.GPUHelper;
++import com.winlator.core.HttpUtils;
++import com.winlator.core.PreloaderDialog;
++import com.winlator.core.WineRegistryEditor;
++import com.winlator.core.WineThemeManager;
++import com.winlator.widget.FrameRating;
++import com.winlator.xenvironment.RootFS;
++
++import org.json.JSONException;
++import org.json.JSONObject;
++
++import java.io.File;
++
++/**
++ * One-click flow for Battle.net:
++ *  1. Creates (once) a container preconfigured for Battle.net.
++ *  2. Downloads the official installer from Blizzard's servers (never bundled).
++ *  3. Runs the installer, or the installed launcher on later taps.
++ */
++public final class BattleNetOneClick {
++    public static final String EXTRA_TAG = "battlenetOneClick";
++    public static final String INTENT_EXTRA = "battlenet_one_click";
++    public static final String CONTAINER_NAME = "Battle.net";
++    public static final String INSTALLER_URL = "https://downloader.battle.net/download/getInstaller?os=win&installer=Battle.net-Setup.exe";
++    public static final String SCREEN_SIZE = "1280x720";
++
++    /** Workaround for the Battle.net login window not showing or crashing under Wine. */
++    private static final String EXTRA_ENV_VARS = "WINE_SIMULATE_WRITECOPY=1";
++
++    private static final String[] LAUNCHER_PATHS = {
++        "Program Files (x86)/Battle.net/Battle.net Launcher.exe",
++        "Program Files (x86)/Battle.net/Battle.net.exe",
++        "Program Files/Battle.net/Battle.net Launcher.exe",
++        "Program Files/Battle.net/Battle.net.exe"
++    };
++
++    private BattleNetOneClick() {}
++
++    public interface OnContainersChanged {
++        void call();
++    }
++
++    public static void start(final Activity activity, final ContainerManager manager, final OnContainersChanged onContainersChanged) {
++        if (!RootFS.find(activity).isValid()) {
++            Toast.makeText(activity, R.string.battlenet_wait_for_install, Toast.LENGTH_LONG).show();
++            return;
++        }
++
++        Container container = findContainer(manager);
++        if (container != null) {
++            continueWith(activity, container);
++            return;
++        }
++
++        ContentDialog.confirm(activity, R.string.battlenet_confirm_create, () -> {
++            final PreloaderDialog preloaderDialog = new PreloaderDialog(activity);
++            preloaderDialog.show(R.string.creating_container);
++            try {
++                manager.createContainerAsync(buildContainerData(activity), (created) -> {
++                    preloaderDialog.close();
++                    if (created == null) {
++                        ContentDialog.alert(activity, R.string.battlenet_create_failed, null);
++                        return;
++                    }
++                    created.putExtra(EXTRA_TAG, "1");
++                    created.saveData();
++                    applyRegistryDefaults(created);
++                    if (onContainersChanged != null) onContainersChanged.call();
++                    continueWith(activity, created);
++                });
++            }
++            catch (JSONException e) {
++                preloaderDialog.close();
++                ContentDialog.alert(activity, R.string.battlenet_create_failed, null);
++            }
++        });
++    }
++
++    public static Container findContainer(ContainerManager manager) {
++        for (Container container : manager.getContainers()) {
++            if (container.getExtra(EXTRA_TAG).equals("1")) return container;
++        }
++        return null;
++    }
++
++    public static File findLauncher(Container container) {
++        File driveC = getDriveC(container);
++        for (String path : LAUNCHER_PATHS) {
++            File file = new File(driveC, path);
++            if (file.isFile()) return file;
++        }
++        return null;
++    }
++
++    private static void continueWith(Activity activity, Container container) {
++        File launcher = findLauncher(container);
++        if (launcher != null) {
++            launch(activity, container, launcher);
++            return;
++        }
++
++        final File installer = getInstallerFile(container);
++        if (installer.isFile() && installer.length() > 0) {
++            launch(activity, container, installer);
++            return;
++        }
++
++        File parent = installer.getParentFile();
++        if (parent != null) parent.mkdirs();
++
++        HttpUtils.download(activity, INSTALLER_URL, installer, (success) -> {
++            if (success && installer.isFile() && installer.length() > 0) {
++                launch(activity, container, installer);
++            }
++            else ContentDialog.alert(activity, R.string.battlenet_download_failed, null);
++        });
++    }
++
++    private static void launch(Activity activity, Container container, File exe) {
++        FileUtils.chmod(exe, 0771);
++        Intent intent = new Intent(activity, XServerDisplayActivity.class);
++        intent.putExtra("container_id", container.id);
++        intent.putExtra("exec_path", exe.getPath());
++        intent.putExtra(INTENT_EXTRA, true);
++        activity.startActivity(intent);
++    }
++
++    private static File getDriveC(Container container) {
++        return new File(container.getRootDir(), ".wine/drive_c");
++    }
++
++    private static File getInstallerFile(Container container) {
++        return new File(getDriveC(container), "BattleNetSetup/Battle.net-Setup.exe");
++    }
++
++    private static JSONObject buildContainerData(Context context) throws JSONException {
++        EnvVars envVars = new EnvVars(Container.DEFAULT_ENV_VARS);
++        envVars.putAll(new EnvVars(EXTRA_ENV_VARS));
++
++        // Turnip only works on Adreno GPUs; keep the app default (Vortek) everywhere else.
++        String vulkanDriver = GPUHelper.getAdrenoModelId(context) > 0 ? GraphicsDrivers.TURNIP : GraphicsDrivers.DEFAULT_VULKAN_DRIVER;
++
++        JSONObject data = new JSONObject();
++        data.put("name", CONTAINER_NAME);
++        data.put("screenSize", SCREEN_SIZE);
++        data.put("envVars", envVars.toString());
++        data.put("graphicsDriver", vulkanDriver+","+GraphicsDrivers.DEFAULT_OPENGL_DRIVER);
++        data.put("dxwrapper", Container.DEFAULT_DXWRAPPER);
++        data.put("audioDriver", Container.DEFAULT_AUDIO_DRIVER);
++        data.put("wincomponents", Container.DEFAULT_WINCOMPONENTS);
++        data.put("drives", Container.DEFAULT_DRIVES);
++        data.put("hudMode", (byte)FrameRating.Mode.SIMPLE.ordinal());
++        data.put("startupSelection", Container.STARTUP_SELECTION_ESSENTIAL);
++        data.put("box64Preset", Box64Preset.STABILITY);
++        data.put("desktopTheme", WineThemeManager.DEFAULT_DESKTOP_THEME);
++        return data;
++    }
++
++    /** Same Direct3D/input registry defaults the regular "create container" screen writes. */
++    private static void applyRegistryDefaults(Container container) {
++        File userRegFile = new File(container.getRootDir(), ".wine/user.reg");
++        if (!userRegFile.isFile()) return;
++        try (WineRegistryEditor registryEditor = new WineRegistryEditor(userRegFile)) {
++            registryEditor.setStringValue("Software\\Wine\\DirectInput", "MouseWarpOverride", "enable");
++            registryEditor.setStringValue("Software\\Wine\\Direct3D", "shader_backend", "glsl");
++            registryEditor.setStringValue("Software\\Wine\\Direct3D", "UseGLSL", "enabled");
++        }
++    }
++}
+diff --git a/app/src/main/res/layout/containers_fragment.xml b/app/src/main/res/layout/containers_fragment.xml
+index a954448..74cfecc 100644
+--- a/app/src/main/res/layout/containers_fragment.xml
++++ b/app/src/main/res/layout/containers_fragment.xml
+@@ -8,6 +8,8 @@
+         android:id="@+id/RecyclerView"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
++        android:paddingBottom="72dp"
++        android:clipToPadding="false"
+         android:scrollbars="vertical"
+         app:layoutManager="LinearLayoutManager" />
+ 
+@@ -19,4 +21,13 @@
+         android:text="@string/no_items_to_display"
+         android:textSize="24sp"
+         android:visibility="gone" />
++
++    <Button
++        android:id="@+id/BTBattleNetOneClick"
++        style="@style/ButtonPositive"
++        android:layout_width="wrap_content"
++        android:layout_height="48dp"
++        android:layout_gravity="bottom|center_horizontal"
++        android:layout_marginBottom="16dp"
++        android:text="@string/battlenet_one_click_install" />
+ </FrameLayout>
+diff --git a/app/src/main/res/values-ko/strings.xml b/app/src/main/res/values-ko/strings.xml
+new file mode 100644
+index 0000000..70aded3
+--- /dev/null
++++ b/app/src/main/res/values-ko/strings.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="battlenet_one_click_install">배틀넷 원클릭 설치</string>
++    <string name="battlenet_one_click_launch">배틀넷 실행</string>
++    <string name="battlenet_confirm_create">배틀넷 전용으로 설정된 컨테이너를 만들고, 블리자드 공식 서버에서 설치 파일을 내려받습니다. 계속할까요?</string>
++    <string name="battlenet_create_failed">배틀넷 컨테이너를 만들지 못했습니다. 저장공간을 확인한 뒤 다시 시도해 주세요.</string>
++    <string name="battlenet_download_failed">배틀넷 설치 파일을 받지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.</string>
++    <string name="battlenet_wait_for_install">Winlator 시스템 파일 설치가 끝날 때까지 기다려 주세요.</string>
++</resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index e943712..79eb3e1 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">Winlator</string>
++    <string name="app_name">Winlator Battle.net</string>
+     <string name="run">Run</string>
+     <string name="edit">Edit</string>
+     <string name="remove">Remove</string>
+@@ -358,4 +358,10 @@
+     <string name="fgs_notification_content_else">Winlator is running in the background</string>
+     <string name="save_mem_on_run_from_steam">Save memory on run from Steam</string>
+     <string name="present_mode">Present Mode</string>
+-</resources>
+\ No newline at end of file
++    <string name="battlenet_one_click_install">Battle.net one-click install</string>
++    <string name="battlenet_one_click_launch">Launch Battle.net</string>
++    <string name="battlenet_confirm_create">A container preconfigured for Battle.net will be created and the official installer will be downloaded from Blizzard\'s servers. Continue?</string>
++    <string name="battlenet_create_failed">Failed to create the Battle.net container. Check the free storage space and try again.</string>
++    <string name="battlenet_download_failed">Failed to download the Battle.net installer. Check your internet connection and try again.</string>
++    <string name="battlenet_wait_for_install">Please wait until Winlator finishes installing its system files.</string>
++</resources>
