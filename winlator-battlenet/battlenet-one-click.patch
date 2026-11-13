@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index 7690275..17a690a 100644
+index 7690275..00ec4ae 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
 @@ -9,7 +9,7 @@ android {
@@ -7,10 +7,45 @@ index 7690275..17a690a 100644
          targetSdkVersion 28
          versionCode 33
 -        versionName "11.2"
-+        versionName "11.2-battlenet"
++        versionName "11.2-battlenet-dex"
      }
  
      buildTypes {
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 1262c0d..1c11df6 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -24,11 +24,14 @@
+         android:allowAudioPlaybackCapture="true"
+         android:label="@string/app_name">
+ 
++        <!-- Samsung DeX: keep the process alive (no restart) when switching between phone and DeX -->
++        <meta-data android:name="com.samsung.android.keepalive.density" android:value="true" />
++
+         <activity android:name="com.winlator.MainActivity"
+             android:theme="@style/AppThemeDark"
+             android:exported="true"
+             android:screenOrientation="sensor"
+-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation">
++            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation|uiMode">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN"/>
+                 <category android:name="android.intent.category.LAUNCHER"/>
+@@ -40,8 +43,12 @@
+             android:theme="@style/AppThemeFullscreenDark"
+             android:supportsPictureInPicture="true"
+             android:launchMode="singleTask"
+-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation"
+-            android:screenOrientation="sensorLandscape" />
++            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation|uiMode"
++            android:screenOrientation="sensorLandscape">
++            <!-- Samsung DeX: open full screen on the monitor -->
++            <meta-data android:name="com.samsung.android.dex.launchwidth" android:value="0" />
++            <meta-data android:name="com.samsung.android.dex.launchheight" android:value="0" />
++        </activity>
+ 
+         <activity android:name="com.winlator.ControlsEditorActivity"
+             android:exported="false"
 diff --git a/app/src/main/java/com/winlator/ContainersFragment.java b/app/src/main/java/com/winlator/ContainersFragment.java
 index aab4c0a..341d13f 100644
 --- a/app/src/main/java/com/winlator/ContainersFragment.java
@@ -71,7 +106,7 @@ index aab4c0a..341d13f 100644
  
      @Override
 diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
-index 667f1b3..133d180 100644
+index 667f1b3..769711f 100644
 --- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
 +++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
 @@ -29,6 +29,7 @@ import androidx.preference.PreferenceManager;
@@ -82,6 +117,15 @@ index 667f1b3..133d180 100644
  import com.winlator.container.Container;
  import com.winlator.container.ContainerManager;
  import com.winlator.container.DXWrappers;
+@@ -235,7 +236,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         inputControlsManager = new InputControlsManager(this);
+         xServer = new XServer(this, screenInfo);
+         xServer.setWinHandler(winHandler);
+-        final boolean[] flags = {false, shortcut != null || getIntent().hasExtra("exec_path")};
++        final boolean[] flags = {false, (shortcut != null || getIntent().hasExtra("exec_path")) && !isBattleNetDesktopMode()};
+         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
+             @Override
+             public void onUpdateWindowContent(Window window) {
 @@ -432,7 +433,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
          if (environment != null) environment.stopEnvironmentComponents();
  
@@ -91,17 +135,39 @@ index 667f1b3..133d180 100644
              AppUtils.RestartApplicationOptions options = new AppUtils.RestartApplicationOptions();
              options.containerId = container.id;
              options.startPath = FileUtils.getDirname(intent.getStringExtra("exec_path"));
+@@ -510,7 +511,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         if (container != null) {
+             if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
+ 
+-            String desktopName = shortcut != null || getIntent().hasExtra("exec_path") ? "nogui" : "shell";
++            String desktopName = (shortcut != null || getIntent().hasExtra("exec_path")) && !isBattleNetDesktopMode() ? "nogui" : "shell";
+             String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
+             guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
+ 
+@@ -948,6 +949,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         }
+     }
+ 
++    private boolean isBattleNetDesktopMode() {
++        return getIntent().getBooleanExtra(BattleNetOneClick.DESKTOP_MODE_EXTRA, false);
++    }
++
+     private boolean isGenerateWineprefix() {
+         return getIntent().getBooleanExtra("generate_wineprefix", false);
+     }
 diff --git a/app/src/main/java/com/winlator/battlenet/BattleNetOneClick.java b/app/src/main/java/com/winlator/battlenet/BattleNetOneClick.java
 new file mode 100644
-index 0000000..e549116
+index 0000000..606702e
 --- /dev/null
 +++ b/app/src/main/java/com/winlator/battlenet/BattleNetOneClick.java
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,214 @@
 +package com.winlator.battlenet;
 +
 +import android.app.Activity;
++import android.app.ActivityOptions;
 +import android.content.Context;
 +import android.content.Intent;
++import android.graphics.Rect;
 +import android.widget.Toast;
 +
 +import com.winlator.R;
@@ -135,6 +201,10 @@ index 0000000..e549116
 +public final class BattleNetOneClick {
 +    public static final String EXTRA_TAG = "battlenetOneClick";
 +    public static final String INTENT_EXTRA = "battlenet_one_click";
++    /** Show the Windows-style desktop (taskbar) behind Battle.net instead of the app alone. */
++    public static final String DESKTOP_MODE_EXTRA = "battlenet_desktop_mode";
++    /** Last resolution we picked automatically; if the user changes it by hand we stop touching it. */
++    private static final String AUTO_SCREEN_SIZE_EXTRA = "battlenetAutoScreenSize";
 +    public static final String CONTAINER_NAME = "Battle.net";
 +    public static final String INSTALLER_URL = "https://downloader.battle.net/download/getInstaller?os=win&installer=Battle.net-Setup.exe";
 +    public static final String SCREEN_SIZE = "1280x720";
@@ -178,6 +248,7 @@ index 0000000..e549116
 +                        return;
 +                    }
 +                    created.putExtra(EXTRA_TAG, "1");
++                    created.putExtra(AUTO_SCREEN_SIZE_EXTRA, created.getScreenSize());
 +                    created.saveData();
 +                    applyRegistryDefaults(created);
 +                    if (onContainersChanged != null) onContainersChanged.call();
@@ -233,11 +304,33 @@ index 0000000..e549116
 +
 +    private static void launch(Activity activity, Container container, File exe) {
 +        FileUtils.chmod(exe, 0771);
++        boolean dexMode = DexHelper.isDexMode(activity);
++        updateScreenSize(container, dexMode ? DexHelper.pickResolution(activity) : SCREEN_SIZE);
++
 +        Intent intent = new Intent(activity, XServerDisplayActivity.class);
 +        intent.putExtra("container_id", container.id);
 +        intent.putExtra("exec_path", exe.getPath());
 +        intent.putExtra(INTENT_EXTRA, true);
-+        activity.startActivity(intent);
++        intent.putExtra(DESKTOP_MODE_EXTRA, dexMode);
++
++        if (dexMode) {
++            // Samsung DeX: empty launch bounds = open full screen on the monitor.
++            ActivityOptions options = ActivityOptions.makeBasic();
++            options.setLaunchBounds(new Rect(0, 0, 0, 0));
++            activity.startActivity(intent, options.toBundle());
++        }
++        else activity.startActivity(intent);
++    }
++
++    /** Follows the phone/monitor resolution, unless the user picked one manually in the container settings. */
++    private static void updateScreenSize(Container container, String screenSize) {
++        String current = container.getScreenSize();
++        String lastAuto = container.getExtra(AUTO_SCREEN_SIZE_EXTRA, current);
++        if (!current.equals(lastAuto)) return;
++        if (current.equals(screenSize) && lastAuto.equals(screenSize)) return;
++        container.setScreenSize(screenSize);
++        container.putExtra(AUTO_SCREEN_SIZE_EXTRA, screenSize);
++        container.saveData();
 +    }
 +
 +    private static File getDriveC(Container container) {
@@ -280,6 +373,67 @@ index 0000000..e549116
 +            registryEditor.setStringValue("Software\\Wine\\Direct3D", "shader_backend", "glsl");
 +            registryEditor.setStringValue("Software\\Wine\\Direct3D", "UseGLSL", "enabled");
 +        }
++    }
++}
+diff --git a/app/src/main/java/com/winlator/battlenet/DexHelper.java b/app/src/main/java/com/winlator/battlenet/DexHelper.java
+new file mode 100644
+index 0000000..d022575
+--- /dev/null
++++ b/app/src/main/java/com/winlator/battlenet/DexHelper.java
+@@ -0,0 +1,55 @@
++package com.winlator.battlenet;
++
++import android.app.Activity;
++import android.content.Context;
++import android.content.res.Configuration;
++import android.graphics.Point;
++import android.view.Display;
++
++/** Samsung DeX helpers (see developer.samsung.com/samsung-dex). */
++public final class DexHelper {
++    /** Render height cap so a big monitor doesn't overload the phone GPU. */
++    public static final int MAX_RENDER_HEIGHT = 1080;
++
++    private DexHelper() {}
++
++    public static boolean isDexMode(Activity activity) {
++        if (isSamsungDesktopMode(activity)) return true;
++        // Fallback: an activity running on an external display behaves like DeX for our purposes.
++        Display display = activity.getWindowManager().getDefaultDisplay();
++        return display != null && display.getDisplayId() != Display.DEFAULT_DISPLAY;
++    }
++
++    private static boolean isSamsungDesktopMode(Context context) {
++        try {
++            Configuration config = context.getResources().getConfiguration();
++            Class<?> configClass = config.getClass();
++            int enabled = configClass.getField("SEM_DESKTOP_MODE_ENABLED").getInt(configClass);
++            int current = configClass.getField("semDesktopModeEnabled").getInt(config);
++            return enabled == current;
++        }
++        catch (Exception e) {
++            return false; // not a Samsung device / no DeX support
++        }
++    }
++
++    /** Monitor resolution in landscape, scaled down to at most 1080p, keeping aspect ratio. */
++    public static String pickResolution(Activity activity) {
++        Point size = new Point();
++        activity.getWindowManager().getDefaultDisplay().getRealSize(size);
++        return pickResolution(size.x, size.y);
++    }
++
++    static String pickResolution(int width, int height) {
++        int w = Math.max(width, height);
++        int h = Math.min(width, height);
++        if (w <= 0 || h <= 0) return BattleNetOneClick.SCREEN_SIZE;
++        if (h > MAX_RENDER_HEIGHT) {
++            w = Math.round(w * (MAX_RENDER_HEIGHT / (float)h));
++            h = MAX_RENDER_HEIGHT;
++        }
++        w -= w % 2;
++        h -= h % 2;
++        return w+"x"+h;
 +    }
 +}
 diff --git a/app/src/main/res/layout/containers_fragment.xml b/app/src/main/res/layout/containers_fragment.xml
